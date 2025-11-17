@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>TopFreeMail — temporary email</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial;margin:18px;color:#111;max-width:900px}
+    .card{border:1px solid #ddd;padding:12px;border-radius:8px;margin-bottom:12px}
+    .addr{font-family:monospace;background:#f4f4f4;padding:6px;border-radius:6px;display:inline-block}
+    input,textarea,select{width:100%;padding:8px;margin-top:6px;border-radius:6px;border:1px solid #ccc}
+    button{padding:8px 12px;border-radius:6px;cursor:pointer}
+    .small{font-size:0.9rem;color:#555}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1 style="margin:0">TopFreeMail</h1>
+      <div class="small">Temporary inboxes at <strong>@topfreemail.org.ng</strong></div>
+    </div>
+    <div class="small">Contact: <a href="mailto:contact@topfreemail.org.ng">contact@topfreemail.org.ng</a></div>
+  </header>
+
+  <div class="card">
+    <h3>Create temporary address</h3>
+    <label>Retention (days):</label>
+    <select id="ret">
+      <option value="7">7 days</option>
+      <option value="30">30 days</option>
+      <option value="90">90 days</option>
+      <option value="365" selected>365 days</option>
+    </select>
+    <div style="margin-top:10px">
+      <button onclick="create()">Create address</button>
+    </div>
+    <div id="createRes" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Access an inbox</h3>
+    <label>Address (exact):</label>
+    <input id="addr" placeholder="example: abc123@topfreemail.org.ng">
+    <label>Access token (paste the token you saved at creation):</label>
+    <input id="token" placeholder="token">
+    <div style="margin-top:8px">
+      <button onclick="access()">Open inbox</button>
+      <button onclick="clearFields()" style="margin-left:8px">Clear</button>
+    </div>
+    <div id="inbox" style="margin-top:12px"></div>
+  </div>
+
+  <script>
+    async function create(){
+      document.getElementById('createRes').innerText = 'Creating…';
+      const days = parseInt(document.getElementById('ret').value||'365',10);
+      const res = await fetch('/api/create', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ retentionDays: days })
+      });
+      const j = await res.json();
+      if(j.error) { document.getElementById('createRes').innerText = 'Error: ' + j.error; return; }
+      document.getElementById('createRes').innerHTML = `
+        <div>Address: <span class="addr">${j.address}</span></div>
+        <div style="margin-top:8px"><strong>Access token — copy this now (shown once):</strong>
+          <div style="background:#eef;padding:8px;margin-top:6px;word-break:break-all">${j.token}</div>
+        </div>
+        <div class="small" style="margin-top:8px">Store the token (or paste it on another device into the Access form). This page will not show the token again.</div>
+      `;
+    }
+
+    function clearFields(){
+      document.getElementById('addr').value=''; document.getElementById('token').value=''; document.getElementById('inbox').innerHTML='';
+    }
+
+    async function access(){
+      const address = document.getElementById('addr').value.trim();
+      const token = document.getElementById('token').value.trim();
+      if(!address||!token){ alert('Address and token are required'); return; }
+      document.getElementById('inbox').innerHTML = 'Loading messages…';
+      // list messages
+      const res = await fetch('/api/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ address, token })
+      });
+      const j = await res.json();
+      if(j.error){ document.getElementById('inbox').innerText = 'Error: ' + j.error; return; }
+      const msgs = j.messages || [];
+      if(msgs.length === 0){ document.getElementById('inbox').innerText = 'No messages yet.'; return; }
+      let html = '<ul>';
+      msgs.forEach(m=>{
+        html += `<li style="margin-bottom:10px"><strong>${m.subject||'(no subject)'}</strong><br/><small>From: ${m.from_addr} • ${new Date(m.received_at).toLocaleString()}</small>
+          <div style="margin-top:6px"><button onclick="view(${m.id},'${address}','${token}')">View</button></div></li>`;
+      });
+      html += '</ul>';
+      document.getElementById('inbox').innerHTML = html;
+    }
+
+    async function view(id,address,token){
+      // fetch single message
+      const res = await fetch('/api/message', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ address, token, id })
+      });
+      const j = await res.json();
+      if(j.error){ alert('Error: ' + j.error); return; }
+      const m = j.message;
+      let body = m.body_text || '(no body)';
+      alert('From: ' + m.from_addr + '\\nSubject: ' + (m.subject||'') + '\\n\\n' + body);
+    }
+  </script>
+</body>
+</html>
