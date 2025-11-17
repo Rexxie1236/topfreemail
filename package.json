@@ -1,0 +1,17 @@
+{
+  "name": "topfreemail-backend",
+  "version": "1.0.0",
+  "description": "TopFreeMail - temporary email backend (CloudMailin inbound)",
+  "main": "api/actions.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.0",
+    "nanoid": "^4.0.0",
+    "pg": "^8.11.0",
+    "sqlite3": "^5.1.6",
+    "formidable": "^3.5.2"
+  }
+}
