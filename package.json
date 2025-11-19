@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "bcrypt": "^5.1.0",
-    "nanoid": "^4.0.0",
+    "nanoid": "3.3.7",
     "pg": "^8.11.0",
     "sqlite3": "^5.1.6",
     "formidable": "^3.5.2"
