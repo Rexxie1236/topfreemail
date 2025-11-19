@@ -4,6 +4,8 @@ const db = require('../lib/db');
 
 exports.config = { api: { bodyParser: true } }
 
+// allow Vercel to parse JSON body
+module.exports.config = { api: { bodyParser: true } };
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
