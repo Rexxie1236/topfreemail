@@ -1,66 +1,37 @@
 // api/messages.js
-const bcrypt = require('bcrypt');
-const db = require('../lib/db');
-
-exports.config = { api: { bodyParser: true } };
+const bcrypt = require("bcrypt");
+const db = require("../lib/db");
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "method" });
 
-  const { address, token, resetKey } = req.body || {};
-  if (!address || (!token && !resetKey)) {
-    return res.status(400).json({ error: 'missing address or token/resetKey' });
+  const { address, credential } = req.body || {};
+  if (!address || !credential)
+    return res.status(400).json({ error: "missing_fields" });
+
+  await db.init();
+
+  const acc = await db.getAddress(address);
+  if (!acc) return res.status(404).json({ error: "not_found" });
+
+  let ok = false;
+
+  // If user converted token → password
+  if (acc.password_hash) {
+    ok = await bcrypt.compare(credential, acc.password_hash);
+  } else {
+    ok = await bcrypt.compare(credential, acc.token_hash);
   }
 
-  try {
-    await db.init();
-  } catch (err) {
-    console.error('db.init failed in messages:', err && err.message ? err.message : err);
-    return res.status(504).json({ error: 'database_unavailable' });
-  }
+  if (!ok) return res.status(403).json({ error: "invalid_credential" });
 
-  try {
-    const pool = db.getPool();
-    const r = await pool.query(
-      'SELECT id, token_hash, reset_key_hash FROM addresses WHERE address = $1 LIMIT 1',
-      [address]
-    );
-    const row = r.rows[0];
-    if (!row) return res.status(404).json({ error: 'not_found' });
+  await db.saveLastActivity(acc.id);
+  const msgs = await db.listMessages(acc.id);
 
-    let allowed = false;
-
-    // Try resetKey (password) first if provided or exists
-    if (resetKey && row.reset_key_hash) {
-      try { allowed = await bcrypt.compare(String(resetKey), row.reset_key_hash); }
-      catch (e) { console.error('bcrypt.compare reset_key_hash error:', e && e.message ? e.message : e); }
-    }
-
-    // If not allowed and token provided, try token
-    if (!allowed && token && row.token_hash) {
-      try { allowed = await bcrypt.compare(String(token), row.token_hash); }
-      catch (e) { console.error('bcrypt.compare token_hash error:', e && e.message ? e.message : e); }
-    }
-
-    if (!allowed) return res.status(401).json({ error: 'unauthorized' });
-
-    // fetch messages for this address (assumes messages.address_id references addresses.id)
-    const msgsQ = await pool.query(
-      `SELECT id, from_addr, subject, body_text, received_at
-       FROM messages
-       WHERE address_id = $1
-       ORDER BY received_at DESC
-       LIMIT 200`,
-      [row.id]
-    );
-
-    return res.status(200).json({
-      allowed: true,
-      converted: !!row.reset_key_hash,
-      messages: msgsQ.rows || []
-    });
-  } catch (err) {
-    console.error('messages error:', err && err.message ? err.message : err);
-    return res.status(500).json({ error: 'server' });
-  }
+  res.json({
+    ok: true,
+    converted: !!acc.password_hash,
+    messages: msgs
+  });
 };
