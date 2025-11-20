@@ -1,41 +1,25 @@
 // api/convert.js
-const bcrypt = require('bcrypt');
-const db = require('../lib/db');
-
-exports.config = { api: { bodyParser: true } };
+const bcrypt = require("bcrypt");
+const db = require("../lib/db");
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "method" });
 
-  const { address, token, newResetKey } = req.body || {};
-  if (!address || !token || !newResetKey) {
-    return res.status(400).json({ error: 'missing address, token or newResetKey' });
-  }
+  const { address, token, newPassword } = req.body || {};
+  if (!address || !token || !newPassword)
+    return res.status(400).json({ error: "missing_fields" });
 
-  try {
-    await db.init();
-  } catch (err) {
-    console.error('db.init failed in convert:', err && err.message ? err.message : err);
-    return res.status(504).json({ error: 'database_unavailable' });
-  }
+  await db.init();
 
-  try {
-    const pool = db.getPool();
-    const r = await pool.query('SELECT id, token_hash FROM addresses WHERE address = $1 LIMIT 1', [address]);
-    const row = r.rows[0];
-    if (!row) return res.status(404).json({ error: 'not_found' });
+  const acc = await db.getAddress(address);
+  if (!acc) return res.status(404).json({ error: "not_found" });
 
-    // Verify token
-    const ok = await bcrypt.compare(String(token), row.token_hash);
-    if (!ok) return res.status(401).json({ error: 'invalid_token' });
+  const ok = await bcrypt.compare(token, acc.token_hash);
+  if (!ok) return res.status(403).json({ error: "invalid_token" });
 
-    // Hash the new resetKey and store it
-    const hk = await bcrypt.hash(String(newResetKey), 10);
-    await pool.query('UPDATE addresses SET reset_key_hash = $1 WHERE id = $2', [hk, row.id]);
+  const newHash = await bcrypt.hash(newPassword, 10);
+  await db.savePassword(acc.id, newHash);
 
-    return res.status(200).json({ converted: true });
-  } catch (err) {
-    console.error('convert error:', err && err.message ? err.message : err);
-    return res.status(500).json({ error: 'server' });
-  }
+  res.json({ converted: true });
 };
